@@ -8,7 +8,7 @@ variables:
   acrLoginServer: 'group15acr.azurecr.io'
   imageName: 'group15-lab4'
   # Web App Details
-  webAppName: 'Webappgrp15'
+  webAppName: 'Webappgrp15'  # Updated to match your actual web app name
   resourceGroup: 'group15-resources'
   # Slot Details
   slotName: 'staging'
@@ -27,15 +27,22 @@ stages:
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          # Deploy to staging slot
+          # First check if slot exists, create if it doesn't
+          SLOT_EXISTS=$(az webapp deployment slot list --name $(webAppName) --resource-group $(resourceGroup) --query "[?name=='$(slotName)']" --output tsv)
+          if [ -z "$SLOT_EXISTS" ]; then
+            echo "Creating staging slot..."
+            az webapp deployment slot create --name $(webAppName) --resource-group $(resourceGroup) --slot $(slotName)
+          fi
+          
+          # Deploy to staging slot with updated parameter names
           az webapp config container set \
             --resource-group $(resourceGroup) \
             --name $(webAppName) \
             --slot $(slotName) \
-            --docker-custom-image-name $(acrLoginServer)/$(imageName):latest \
-            --docker-registry-server-url https://$(acrLoginServer) \
-            --docker-registry-server-user group15acr \
-            --docker-registry-server-password $(acrPassword)
+            --container-image-name $(acrLoginServer)/$(imageName):latest \
+            --container-registry-url https://$(acrLoginServer) \
+            --container-registry-user group15acr \
+            --container-registry-password $(acrPassword)
           
           # Restart the web app to apply changes
           az webapp restart --resource-group $(resourceGroup) --name $(webAppName) --slot $(slotName)
@@ -82,10 +89,11 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           # Update the production slot with webapp token credentials
+          # Using updated parameter names
           az webapp config container set \
             --resource-group $(resourceGroup) \
             --name $(webAppName) \
-            --docker-custom-image-name $(acrLoginServer)/$(imageName):latest \
-            --docker-registry-server-url https://$(acrLoginServer) \
-            --docker-registry-server-user webapp \
-            --docker-registry-server-password $(webappPassword)
+            --container-image-name $(acrLoginServer)/$(imageName):latest \
+            --container-registry-url https://$(acrLoginServer) \
+            --container-registry-user webapp \
+            --container-registry-password $(webappPassword)
