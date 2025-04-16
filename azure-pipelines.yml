@@ -1,29 +1,91 @@
-# Docker
-# Build a Docker image
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+trigger: none # This will be triggered from GitHub Actions
 
-trigger:
-- main
-
-resources:
-- repo: self
+pool:
+  vmImage: 'ubuntu-latest'
 
 variables:
-  tag: '$(Build.BuildId)'
+  # Container Registry Details
+  acrLoginServer: 'group15acr.azurecr.io'
+  imageName: 'group15-lab4'
+  # Web App Details
+  webAppName: 'group15-lab4'
+  resourceGroup: 'group15-resources'
+  # Slot Details
+  slotName: 'staging'
 
 stages:
-- stage: Build
-  displayName: Build image
+- stage: DeployToStaging
+  displayName: 'Deploy to Staging'
   jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: ubuntu-latest
+  - job: Deploy
+    displayName: 'Deploy to Staging Slot'
     steps:
-    - task: Docker@2
-      displayName: Build an image
+    - task: AzureCLI@2
+      displayName: 'Deploy to Staging Slot'
       inputs:
-        command: build
-        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        tags: |
-          $(tag)
+        azureSubscription: 'Your-Azure-Subscription'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Deploy to staging slot
+          az webapp config container set \
+            --resource-group $(resourceGroup) \
+            --name $(webAppName) \
+            --slot $(slotName) \
+            --docker-custom-image-name $(acrLoginServer)/$(imageName):latest \
+            --docker-registry-server-url https://$(acrLoginServer) \
+            --docker-registry-server-user group15acr \
+            --docker-registry-server-password $(acrPassword)
+          
+          # Restart the web app to apply changes
+          az webapp restart --resource-group $(resourceGroup) --name $(webAppName) --slot $(slotName)
+
+- stage: Test
+  displayName: 'Test Staging Deployment'
+  dependsOn: DeployToStaging
+  jobs:
+  - job: RunTests
+    displayName: 'Run Integration Tests'
+    steps:
+    - script: |
+        # Simple test to check if site is up
+        echo "Running integration tests on staging environment"
+        curl -s -o /dev/null -w "%{http_code}" https://$(webAppName)-$(slotName).azurewebsites.net | grep 200
+      displayName: 'Verify Deployment'
+
+- stage: DeployToProduction
+  displayName: 'Deploy to Production'
+  dependsOn: Test
+  jobs:
+  - job: SwapSlots
+    displayName: 'Swap Staging to Production'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Swap Slots'
+      inputs:
+        azureSubscription: 'Your-Azure-Subscription'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Swap staging slot to production
+          az webapp deployment slot swap \
+            --resource-group $(resourceGroup) \
+            --name $(webAppName) \
+            --slot $(slotName) \
+            --target-slot production
+    
+    - task: AzureCLI@2
+      displayName: 'Configure Web App Pull Permissions'
+      inputs:
+        azureSubscription: 'Your-Azure-Subscription'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Update the production slot with webapp token credentials
+          az webapp config container set \
+            --resource-group $(resourceGroup) \
+            --name $(webAppName) \
+            --docker-custom-image-name $(acrLoginServer)/$(imageName):latest \
+            --docker-registry-server-url https://$(acrLoginServer) \
+            --docker-registry-server-user webapp \
+            --docker-registry-server-password $(webappPassword)
