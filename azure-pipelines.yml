@@ -8,7 +8,7 @@ variables:
   acrLoginServer: 'group15acr.azurecr.io'
   imageName: 'group15-lab4'
   # Web App Details
-  webAppName: 'group15-lab4'
+  webAppName: 'Webappgrp15'
   resourceGroup: 'group15-resources'
   # Slot Details
   slotName: 'staging'
