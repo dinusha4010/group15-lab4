@@ -1,99 +1,53 @@
-trigger: none # This will be triggered from GitHub Actions
+trigger:
+- main  # Triggers when changes are pushed to main branch
 
 pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  # Container Registry Details
-  acrLoginServer: 'group15acr.azurecr.io'
-  imageName: 'group15-lab4'
-  # Web App Details
-  webAppName: 'Webappgrp15'  # Updated to match your actual web app name
-  resourceGroup: 'group15-resources'
-  # Slot Details
-  slotName: 'staging'
+  # Docker registry service connection - replace with your connection name
+  dockerRegistryServiceConnection: 'yy'
+  imageRepository: 'group15-lab4'
+  containerRegistry: 'group15acr.azurecr.io'
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
+  tag: '$(Build.BuildId)'
+  
+  # Azure Web App - replace with your values
+  webAppName: 'Webappgrp15'
+  resourceGroupName: 'group15-resources'
+  azureSubscription: 'Your-Azure-Subscription'
 
 stages:
-- stage: DeployToStaging
-  displayName: 'Deploy to Staging'
+- stage: Build
+  displayName: Build and Push
+  jobs:
+  - job: Build
+    displayName: Build
+    steps:
+    - task: Docker@2
+      displayName: Build and Push
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+          latest
+
+- stage: Deploy
+  displayName: Deploy to Web App
+  dependsOn: Build
   jobs:
   - job: Deploy
-    displayName: 'Deploy to Staging Slot'
+    displayName: Deploy
     steps:
-    - task: AzureCLI@2
-      displayName: 'Deploy to Staging Slot'
+    - task: AzureWebAppContainer@1
+      displayName: Deploy to Azure Web App
       inputs:
-        azureSubscription: 'Your-Azure-Subscription'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          # First check if slot exists, create if it doesn't
-          SLOT_EXISTS=$(az webapp deployment slot list --name $(webAppName) --resource-group $(resourceGroup) --query "[?name=='$(slotName)']" --output tsv)
-          if [ -z "$SLOT_EXISTS" ]; then
-            echo "Creating staging slot..."
-            az webapp deployment slot create --name $(webAppName) --resource-group $(resourceGroup) --slot $(slotName)
-          fi
-          
-          # Deploy to staging slot with updated parameter names
-          az webapp config container set \
-            --resource-group $(resourceGroup) \
-            --name $(webAppName) \
-            --slot $(slotName) \
-            --container-image-name $(acrLoginServer)/$(imageName):latest \
-            --container-registry-url https://$(acrLoginServer) \
-            --container-registry-user group15acr \
-            --container-registry-password $(acrPassword)
-          
-          # Restart the web app to apply changes
-          az webapp restart --resource-group $(resourceGroup) --name $(webAppName) --slot $(slotName)
-
-- stage: Test
-  displayName: 'Test Staging Deployment'
-  dependsOn: DeployToStaging
-  jobs:
-  - job: RunTests
-    displayName: 'Run Integration Tests'
-    steps:
-    - script: |
-        # Simple test to check if site is up
-        echo "Running integration tests on staging environment"
-        curl -s -o /dev/null -w "%{http_code}" https://$(webAppName)-$(slotName).azurewebsites.net | grep 200
-      displayName: 'Verify Deployment'
-
-- stage: DeployToProduction
-  displayName: 'Deploy to Production'
-  dependsOn: Test
-  jobs:
-  - job: SwapSlots
-    displayName: 'Swap Staging to Production'
-    steps:
-    - task: AzureCLI@2
-      displayName: 'Swap Slots'
-      inputs:
-        azureSubscription: 'Your-Azure-Subscription'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          # Swap staging slot to production
-          az webapp deployment slot swap \
-            --resource-group $(resourceGroup) \
-            --name $(webAppName) \
-            --slot $(slotName) \
-            --target-slot production
-    
-    - task: AzureCLI@2
-      displayName: 'Configure Web App Pull Permissions'
-      inputs:
-        azureSubscription: 'Your-Azure-Subscription'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          # Update the production slot with webapp token credentials
-          # Using updated parameter names
-          az webapp config container set \
-            --resource-group $(resourceGroup) \
-            --name $(webAppName) \
-            --container-image-name $(acrLoginServer)/$(imageName):latest \
-            --container-registry-url https://$(acrLoginServer) \
-            --container-registry-user webapp \
-            --container-registry-password $(webappPassword)
+        azureSubscription: $(azureSubscription)
+        appName: $(webAppName)
+        resourceGroupName: $(resourceGroupName)
+        containers: $(containerRegistry)/$(imageRepository):$(tag)
+        appSettings: |
+          -WEBSITES_PORT 8080
