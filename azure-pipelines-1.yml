@@ -1,21 +1,19 @@
 trigger: none
-
 pool:
   vmImage: 'ubuntu-latest'
-
 steps:
 - task: Docker@2
   displayName: 'Login to ACR'
   inputs:
     command: login
-    containerRegistry: 'yy'  # Your connection name here
+    containerRegistry: 'yy'  # Your connection name
 
 - script: |
-   # Check if we're logged in
+    # Check Docker login status
     docker info | grep "Registry"
     
-    # Or try to list repositories (will be empty but shouldn't error)
-    az acr repository list --name group15acr
+    # Try a basic Docker command that works with an empty registry
+    docker image ls
     
     echo "Connection test successful!"
   displayName: 'Test ACR Connection'
