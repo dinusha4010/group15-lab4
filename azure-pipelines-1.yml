@@ -11,7 +11,11 @@ steps:
     containerRegistry: 'yy'  # Your connection name here
 
 - script: |
-    # List repositories in the registry
-    docker search group15acr.azurecr.io/
+   # Check if we're logged in
+    docker info | grep "Registry"
+    
+    # Or try to list repositories (will be empty but shouldn't error)
+    az acr repository list --name group15acr
+    
     echo "Connection test successful!"
   displayName: 'Test ACR Connection'
