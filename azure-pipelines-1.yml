@@ -1,0 +1,20 @@
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'yy'  # Your ARM connection
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      # Login to ACR
+      az acr login --name group15acr
+      
+      # List repositories
+      az acr repository list --name group15acr
+      
+      echo "Connection test successful!"
+  displayName: 'Test ACR Connection with Azure CLI'
